@@ -3,7 +3,6 @@ name: ACS_CICD
 on:
   push:
      branches: [ aks ]
-
 jobs:
   docker-build-and-deploy:
     runs-on: ubuntu:latest 
@@ -11,7 +10,6 @@ jobs:
     steps:
        - name: checkout
          uses: actions/checkout@v5.0.0
-         
        - name: Build Docker Image and Push to Docker Hub
          uses: GlueOps/github-actions-build-push-containers@v0.4.1
          with:
