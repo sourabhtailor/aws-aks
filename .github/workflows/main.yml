@@ -2,7 +2,7 @@ name: ACS_CICD
 
 on:
   push:
-     branches: [ aks ]
+     branches: [ main ]
 jobs:
   docker-build-and-deploy:
     runs-on: ubuntu:latest 
