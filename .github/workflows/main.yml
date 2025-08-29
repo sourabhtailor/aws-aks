@@ -1,0 +1,21 @@
+name: ACS_CICD
+
+on:
+  push:
+     branches: [ aks]
+
+jobs:
+  docker_image-build-and-deploy:
+    runs_on: [ ubuntu:latest ] 
+    steps:
+       - name: checkout
+         uses: actions/checkout@v5.0.0
+       - name: Build Docker Image and Push to Docker Hub
+         uses: GlueOps/github-actions-build-push-containers@v0.4.1
+         with:
+            registry: hub.docker.com
+            image_name: sourabhtailor/acr
+            dockerhub_username: sourabhtailor
+            dockerhub_password: dckr_pat_8TqYvBbmviq5kLCArR21qaxVftI
+        
+           
