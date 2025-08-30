@@ -17,3 +17,4 @@ jobs:
             image_name: sourabhtailor/acr
             dockerhub_username: sourabhtailor
             dockerhub_password: dckr_pat_8TqYvBbmviq5kLCArR21qaxVftI
+            tags: latest
