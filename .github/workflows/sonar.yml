@@ -1,0 +1,57 @@
+name: CI - SonarCloud Quality Check with Auto Revert
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: revert-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # Required to push revert commit
+
+jobs:
+  sonar-quality-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 3: Run SonarCloud scan with quality gate blocking
+      - name: SonarCloud Scan
+        id: sonar
+        uses: SonarSource/sonarcloud-github-action@v2
+        with:
+          args: >
+            -Dsonar.projectKey=sourabhtailor_aws-aks
+            -Dsonar.organization=sourabhtailor
+            -Dsonar.sources=.
+            -Dsonar.exclusions=vendor/**,tests/**,.github/**
+            -Dsonar.projectVersion=v1.0.${{ github.run_number }}
+            -Dsonar.qualitygate.wait=true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # Step 4: Revert code if quality gate fails
+      - name: Revert bad commit(s)
+        if: failure()
+        run: |
+            echo "Quality Gate failed. Reverting the commit(s)..."
+            git config --global user.email "actions@github.com"
+            git config --global user.name "GitHub Actions"
+            git fetch origin
+            git checkout dev
+            git pull origin dev
+               # Revert the pushed commit(s)
+            git revert --no-edit ${{ github.event.before }}..${{ github.sha }}
+            
+            echo "Pushing revert to origin/dev..."
+            for i in {1..3}; do
+             git push origin dev && break || sleep 3
+            done
