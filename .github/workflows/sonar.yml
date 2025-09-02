@@ -35,7 +35,6 @@ jobs:
             -Dsonar.exclusions=vendor/**,tests/**,.github/**
             -Dsonar.projectVersion=v1.0.${{ github.run_number }}
             -Dsonar.qualitygate.wait=true
-            -Dsonar.branch.name=release-1.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
