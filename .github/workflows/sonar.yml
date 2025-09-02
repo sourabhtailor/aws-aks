@@ -29,7 +29,7 @@ jobs:
         uses: SonarSource/sonarcloud-github-action@v2
         with:
           args: >
-            -Dsonar.projectKey=sourabhtailor_aws-aks
+            -Dsonar.projectKey=sourabhtailor_sonar-report
             -Dsonar.organization=sourabhtailor
             -Dsonar.sources=.
             -Dsonar.exclusions=vendor/**,tests/**,.github/**
