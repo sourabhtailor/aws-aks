@@ -89,7 +89,7 @@ jobs:
           
             if [ "$TYPE" = "SECURITY_HOTSPOT" ]; then
               ISSUES_JSON=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-                "https://sonarcloud.io/api/hotspots/search?projectKey=sourabhtailor_devbranch&branch=dev")
+                "https://sonarcloud.io/api/hotspots/search?projectKey=sourabhtailor_sonar-report&branch=sonar")
               for FILE in "${FILES[@]}"; do
                 echo "$ISSUES_JSON" \
                   | jq -r --arg FILE "$FILE" '.hotspots[] | select(.component | endswith($FILE)) | "- \(.message) [\(.component):\(.line // "N/A")] (Status: \(.status))"' \
@@ -97,7 +97,7 @@ jobs:
               done
             else
               ISSUES_JSON=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-                "https://sonarcloud.io/api/issues/search?componentKeys=sourabhtailor_devbranch&branch=dev&types=$TYPE&ps=500")
+                "https://sonarcloud.io/api/issues/search?componentKeys=sourabhtailor_sonar-report&branch=sonar&types=$TYPE&ps=500")
               for FILE in "${FILES[@]}"; do
                 echo "$ISSUES_JSON" \
                   | jq -r --arg FILE "$FILE" '.issues[] | select(.component | endswith($FILE)) | "- \(.rule): \(.message) [\(.component):\(.line // "N/A")]"' \
