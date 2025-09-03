@@ -1,4 +1,4 @@
-name: CI - SonarCloud Quality Check with Auto Revert
+name: CI - SonarCloud Quality Check with Report
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - sonar
 
 concurrency:
-  group: revert-${{ github.ref }}
+  group: sonar-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -21,37 +21,102 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 50
 
-      # Step 3: Run SonarCloud scan with quality gate blocking
+      # Step 2: Get changed PHP/JS files since last push
+      - name: Get changed PHP/JS files since last push
+        id: changed
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
+            | grep -E '\.(php|js)$' \
+            | grep -v '^$' \
+            | while read file; do
+                if [ -f "$file" ]; then echo "$file"; fi
+              done \
+            | paste -sd, -)
+
+          echo "files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+
+      # Step 3: Run SonarCloud Scan (always wait for quality gate)
       - name: SonarCloud Scan
-        id: sonar
-        uses: SonarSource/sonarcloud-github-action@v2
+        if: steps.changed.outputs.files != ''
+        uses: SonarSource/sonarqube-scan-action@v5
+        continue-on-error: true   # <-- don’t fail here, let us capture report
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          FILES: ${{ steps.changed.outputs.files }}
         with:
+          projectBaseDir: .
           args: >
             -Dsonar.projectKey=sourabhtailor_sonar-report
             -Dsonar.organization=sourabhtailor
             -Dsonar.sources=.
-            -Dsonar.exclusions=vendor/**,tests/**,.github/**
             -Dsonar.projectVersion=v1.0.${{ github.run_number }}
+            -Dsonar.inclusions=${{ env.FILES }}
             -Dsonar.qualitygate.wait=true
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # # Step 4: Revert code if quality gate fails
-      # - name: Revert bad commit(s)
-      #   if: failure()
-      #   run: |
-      #       echo "Quality Gate failed. Reverting the commit(s)..."
-      #       git config --global user.email "actions@github.com"
-      #       git config --global user.name "GitHub Actions"
-      #       git fetch origin
-      #       git checkout dev
-      #       git pull origin dev
-      #          # Revert the pushed commit(s)
-      #       git revert --no-edit ${{ github.event.before }}..${{ github.sha }}
-            
-      #       echo "Pushing revert to origin/dev..."
-      #       for i in {1..3}; do
-      #        git push origin dev && break || sleep 3
-      #       done
+      # Step 4: Check Quality Gate status
+      - name: Check SonarCloud Quality Gate
+        if: steps.changed.outputs.files != ''
+        id: qualitygate
+        run: |
+          STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=sourabhtailor_sonar-report&branch=sonar" \
+            | jq -r '.projectStatus.status')
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "Quality Gate status: $STATUS"
+
+      # Step 5: Generate grouped Sonar Report (if failed)
+      - name: Generate Sonar Report (if failed)
+        if: steps.qualitygate.outputs.status == 'ERROR'
+        run: |
+          echo " SonarCloud Quality Gate Failed" > sonar-report.md
+          echo "" >> sonar-report.md
+      
+          CHANGED_FILES="${{ steps.changed.outputs.files }}"
+          IFS=',' read -ra FILES <<< "$CHANGED_FILES"
+      
+          # Group issues by type
+          for TYPE in VULNERABILITY BUG CODE_SMELL; do
+            case $TYPE in
+              VULNERABILITY) HEADER="### Security Issues (Vulnerabilities)" ;;
+              BUG) HEADER="### Bugs" ;;
+              SECURITY_HOTSPOT) HEADER="### Security Hotspots (Review Needed)" ;;
+              CODE_SMELL) HEADER="### Code Smells" ;;
+            esac
+      
+            echo "$HEADER" >> sonar-report.md
+      
+            # Fetch issues from SonarCloud API
+            ISSUES_JSON=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/issues/search?componentKeys=sourabhtailor_sonar-report&branch=sonar&types=$TYPE&ps=500")
+      
+            # Loop over only changed files and add issues to report
+            for FILE in "${FILES[@]}"; do
+              echo "$ISSUES_JSON" \
+                | jq -r --arg FILE "$FILE" '.issues[] | select(.component | endswith($FILE)) | "- \(.rule): \(.message) [\(.component):\(.line // "N/A")]"' \
+                >> sonar-report.md
+            done
+      
+            echo "" >> sonar-report.md
+          done
+      
+          echo "### Key Metrics" >> sonar-report.md
+          curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+            "https://sonarcloud.io/api/measures/component?component=sourabhtailor_sonar-report&branch=sonar&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,security_hotspots_reviewed,coverage,duplicated_lines_density" \
+            | jq -r '.component.measures[] | "- \(.metric): \(.value)"' \
+            >> sonar-report.md
+
+
+
+      # Step 6: Upload report as artifact
+      - uses: actions/upload-artifact@v4
+        if: steps.qualitygate.outputs.status == 'ERROR'
+        with:
+          name: sonar-failed-report-${{ github.sha }}
+          path: sonar-report.md
+
+      # Step 7: Explicitly fail if Quality Gate failed
+      - name: Fail pipeline if Sonar failed
+        if: steps.qualitygate.outputs.status == 'ERROR'
+        run: exit 1
