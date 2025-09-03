@@ -77,29 +77,37 @@ jobs:
           IFS=',' read -ra FILES <<< "$CHANGED_FILES"
       
           # Group issues by type
-          for TYPE in VULNERABILITY BUG CODE_SMELL; do
+          for TYPE in VULNERABILITY BUG CODE_SMELL SECURITY_HOTSPOT; do
             case $TYPE in
               VULNERABILITY) HEADER="### Security Issues (Vulnerabilities)" ;;
               BUG) HEADER="### Bugs" ;;
-              SECURITY_HOTSPOT) HEADER="### Security Hotspots (Review Needed)" ;;
               CODE_SMELL) HEADER="### Code Smells" ;;
+              SECURITY_HOTSPOT) HEADER="### Security Hotspots (Review Needed)" ;;
             esac
-      
+          
             echo "$HEADER" >> sonar-report.md
-      
-            # Fetch issues from SonarCloud API
-            ISSUES_JSON=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/issues/search?componentKeys=sourabhtailor_sonar-report&branch=sonar&types=$TYPE&ps=500")
-      
-            # Loop over only changed files and add issues to report
-            for FILE in "${FILES[@]}"; do
-              echo "$ISSUES_JSON" \
-                | jq -r --arg FILE "$FILE" '.issues[] | select(.component | endswith($FILE)) | "- \(.rule): \(.message) [\(.component):\(.line // "N/A")]"' \
-                >> sonar-report.md
-            done
-      
+          
+            if [ "$TYPE" = "SECURITY_HOTSPOT" ]; then
+              ISSUES_JSON=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+                "https://sonarcloud.io/api/hotspots/search?projectKey=sourabhtailor_devbranch&branch=dev")
+              for FILE in "${FILES[@]}"; do
+                echo "$ISSUES_JSON" \
+                  | jq -r --arg FILE "$FILE" '.hotspots[] | select(.component | endswith($FILE)) | "- \(.message) [\(.component):\(.line // "N/A")] (Status: \(.status))"' \
+                  >> sonar-report.md
+              done
+            else
+              ISSUES_JSON=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+                "https://sonarcloud.io/api/issues/search?componentKeys=sourabhtailor_devbranch&branch=dev&types=$TYPE&ps=500")
+              for FILE in "${FILES[@]}"; do
+                echo "$ISSUES_JSON" \
+                  | jq -r --arg FILE "$FILE" '.issues[] | select(.component | endswith($FILE)) | "- \(.rule): \(.message) [\(.component):\(.line // "N/A")]"' \
+                  >> sonar-report.md
+              done
+            fi
+          
             echo "" >> sonar-report.md
           done
+
       
           echo "### Key Metrics" >> sonar-report.md
           curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
