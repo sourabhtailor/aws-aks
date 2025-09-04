@@ -77,43 +77,55 @@ jobs:
           IFS=',' read -ra FILES <<< "$CHANGED_FILES"
       
           # Group issues by type
+                # Step 5: Generate grouped Sonar Report (if failed)
+      - name: Generate Sonar Report (if failed)
+        if: steps.qualitygate.outputs.status == 'ERROR'
+        run: |
+          echo "<html><head><title>SonarCloud Report</title></head><body>" > sonar-report.html
+          echo "<h2>🚨 SonarCloud Quality Gate Failed</h2>" >> sonar-report.html
+      
+          CHANGED_FILES="${{ steps.changed.outputs.files }}"
+          IFS=',' read -ra FILES <<< "$CHANGED_FILES"
+      
+          # Group issues by type
           for TYPE in VULNERABILITY BUG CODE_SMELL SECURITY_HOTSPOT; do
             case $TYPE in
-              VULNERABILITY) HEADER="### Security Issues (Vulnerabilities)" ;;
-              BUG) HEADER="### Bugs" ;;
-              CODE_SMELL) HEADER="### Code Smells" ;;
-              SECURITY_HOTSPOT) HEADER="### Security Hotspots (Review Needed)" ;;
+              VULNERABILITY) HEADER="Security Issues (Vulnerabilities)" ;;
+              BUG) HEADER="Bugs" ;;
+              CODE_SMELL) HEADER="Code Smells" ;;
+              SECURITY_HOTSPOT) HEADER="Security Hotspots (Review Needed)" ;;
             esac
           
-            echo "$HEADER" >> sonar-report.md
+            echo "<h3>$HEADER</h3><ul>" >> sonar-report.html
           
             if [ "$TYPE" = "SECURITY_HOTSPOT" ]; then
               ISSUES_JSON=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
                 "https://sonarcloud.io/api/hotspots/search?projectKey=sourabhtailor_sonar-report&branch=sonar")
               for FILE in "${FILES[@]}"; do
                 echo "$ISSUES_JSON" \
-                  | jq -r --arg FILE "$FILE" '.hotspots[] | select(.component | endswith($FILE)) | "- \(.message) [\(.component):\(.line // "N/A")] (Status: \(.status))"' \
-                  >> sonar-report.md
+                  | jq -r --arg FILE "$FILE" '.hotspots[] | select(.component | endswith($FILE)) | "<li>\(.message) [\(.component):\(.line // "N/A")] (Status: \(.status))</li>"' \
+                  >> sonar-report.html
               done
             else
               ISSUES_JSON=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
                 "https://sonarcloud.io/api/issues/search?componentKeys=sourabhtailor_sonar-report&branch=sonar&types=$TYPE&ps=500")
               for FILE in "${FILES[@]}"; do
                 echo "$ISSUES_JSON" \
-                  | jq -r --arg FILE "$FILE" '.issues[] | select(.component | endswith($FILE)) | "- \(.rule): \(.message) [\(.component):\(.line // "N/A")]"' \
-                  >> sonar-report.md
+                  | jq -r --arg FILE "$FILE" '.issues[] | select(.component | endswith($FILE)) | "<li>\(.rule): \(.message) [\(.component):\(.line // "N/A")]</li>"' \
+                  >> sonar-report.html
               done
             fi
           
-            echo "" >> sonar-report.md
+            echo "</ul>" >> sonar-report.html
           done
-
       
-          echo "### Key Metrics" >> sonar-report.md
+          echo "<h3>Key Metrics</h3><ul>" >> sonar-report.html
           curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
             "https://sonarcloud.io/api/measures/component?component=sourabhtailor_sonar-report&branch=sonar&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,security_hotspots_reviewed,coverage,duplicated_lines_density" \
-            | jq -r '.component.measures[] | "- \(.metric): \(.value)"' \
-            >> sonar-report.md
+            | jq -r '.component.measures[] | "<li>\(.metric): \(.value)</li>"' \
+            >> sonar-report.html
+          echo "</ul></body></html>" >> sonar-report.html
+
 
 
 
