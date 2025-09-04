@@ -41,7 +41,7 @@
 				$admin_link .='<a class="user-dropdown" href="admin/index.php" style="color: #fff;padding: 6px 31px 6px 15px;display: block; text-align: justify;text-decoration: none;"> Dashboard</a>';
 			}else if($_SESSION['role'] != 'Admin'){
 				//echo 'byee';
-				$admin_link .='<a class="user-dropdown" href="user_dashbord.php" style="padding:6px 15px; display: block;border-bottom:1px solid #ccc; width:100%; color:whitesmoke; text-align: justify;text-decoration: none;">My Account</a>';
+				$admin_link .='<a class="user-dropdown" href="user_dashbord.php" style="padding:62px 152px; display: block;border-bottom:1px solid #ccc; width:100%; color:whitesmoke; text-align: justify;text-decoration: none;">My Account</a>';
 			}
 			
 			$u_id = $_SESSION['u_id'];
